@@ -21,6 +21,8 @@ import android.content.Context;
 import android.content.res.Resources;
 import android.os.Build;
 
+import com.tencent.tinker.loader.shareutil.ShareTinkerInternals;
+
 import java.io.File;
 import java.lang.reflect.Field;
 import java.util.Arrays;
@@ -99,10 +101,14 @@ final class NewClassLoaderInjector {
 
         ClassLoader result = null;
         if (useDLC && Build.VERSION.SDK_INT >= 27) {
-            result = new DelegateLastClassLoader(combinedDexPath, combinedLibraryPath, ClassLoader.getSystemClassLoader());
-            final Field parentField = ClassLoader.class.getDeclaredField("parent");
-            parentField.setAccessible(true);
-            parentField.set(result, oldClassLoader);
+            if (ShareTinkerInternals.isNewerOrEqualThanVersion(31 /* Android S */, true)) {
+                result = new DelegateLastClassLoader(combinedDexPath, combinedLibraryPath, oldClassLoader);
+            } else {
+                result = new DelegateLastClassLoader(combinedDexPath, combinedLibraryPath, ClassLoader.getSystemClassLoader());
+                final Field parentField = ClassLoader.class.getDeclaredField("parent");
+                parentField.setAccessible(true);
+                parentField.set(result, oldClassLoader);
+            }
         } else {
             result = new TinkerClassLoader(combinedDexPath, dexOptDir, combinedLibraryPath, oldClassLoader);
         }

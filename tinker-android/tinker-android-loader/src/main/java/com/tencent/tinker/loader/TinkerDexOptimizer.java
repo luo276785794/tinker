@@ -21,6 +21,7 @@ import static com.tencent.tinker.loader.shareutil.ShareConstants.VDEX_SUFFIX;
 
 import android.content.Context;
 import android.content.ContextWrapper;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.os.Binder;
 import android.os.Build;
@@ -155,21 +156,29 @@ public final class TinkerDexOptimizer {
                         interpretDex2Oat(dexFile.getAbsolutePath(), optimizedPath, targetISA);
                     } else if (Build.VERSION.SDK_INT >= 26
                             || (Build.VERSION.SDK_INT >= 25 && Build.VERSION.PREVIEW_SDK_INT != 0)) {
-                        patchClassLoaderStrongRef = NewClassLoaderInjector.triggerDex2Oat(context, optimizedDir,
-                                useDLC, dexFile.getAbsolutePath());
-                        if (Build.VERSION.SDK_INT < 31 && !(Build.VERSION.SDK_INT == 30 && Build.VERSION.PREVIEW_SDK_INT != 0)) {
+                        if (!ShareTinkerInternals.isNewerOrEqualThanVersion(31 /* Android S */, true)) {
+                            patchClassLoaderStrongRef = NewClassLoaderInjector.triggerDex2Oat(context, optimizedDir,
+                                    useDLC, dexFile.getAbsolutePath());
                             // Android Q is significantly slowed down by Fallback Dex Loading procedure, so we
                             // trigger background dexopt to generate executable odex here.
                             triggerPMDexOptOnDemand(context, dexFile.getAbsolutePath(), optimizedPath);
                         } else {
-                            // Wait for their bg-dexopt with quicken filter finishing so that we can delete odex
-                            // generated with quicken filter soon.
-                            if ("oppo".equalsIgnoreCase(Build.MANUFACTURER) || "vivo".equalsIgnoreCase(Build.MANUFACTURER)) {
-                                waitUntilFileGeneratedOrTimeout(context, optimizedPath);
+                            final File oatFile = new File(optimizedPath);
+                            final File oatFinishedMarkerFile = getOatFinishedMarkerFile(dexFile.getAbsolutePath());
+                            final File vdexFile = new File(optimizedPath.substring(
+                                    0, optimizedPath.lastIndexOf(ODEX_SUFFIX)) + VDEX_SUFFIX);
+                            if (!oatFile.exists() || oatFile.length() <= 0 || !oatFinishedMarkerFile.exists()) {
+                                oatFile.delete();
+                                oatFinishedMarkerFile.delete();
+                                // Block any async dex2oat invocation triggered by dex loading to avoid generating
+                                // odex with 'quicken' compile filter.
+                                oatFile.mkdirs();
+                                patchClassLoaderStrongRef = NewClassLoaderInjector.triggerDex2Oat(context, optimizedDir,
+                                        useDLC, dexFile.getAbsolutePath());
+                                waitUntilFileGeneratedOrTimeout(context, vdexFile.getAbsolutePath());
+                                oatFile.delete();
+                                triggerPMDexOptOnDemand(context, dexFile.getAbsolutePath(), optimizedPath);
                             }
-                            triggerPMDexOptOnDemand(context, dexFile.getAbsolutePath(), optimizedPath);
-                            final String vdexPath = optimizedPath.substring(0, optimizedPath.lastIndexOf(ODEX_SUFFIX)) + VDEX_SUFFIX;
-                            waitUntilFileGeneratedOrTimeout(context, vdexPath);
                         }
                     } else {
                         DexFile.loadDex(dexFile.getAbsolutePath(), optimizedPath, 0);
