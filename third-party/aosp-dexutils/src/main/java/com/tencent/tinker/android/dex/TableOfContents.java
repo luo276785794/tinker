@@ -153,10 +153,15 @@ public final class TableOfContents {
 
     private void readHeader(Dex.Section headerIn) throws UnsupportedEncodingException {
         byte[] magic = headerIn.readByteArray(8);
-        int apiTarget = DexFormat.magicToApi(magic);
+        //int apiTarget = DexFormat.magicToApi(magic);
 
-        if (apiTarget != DexFormat.API_NO_EXTENDED_OPCODES) {
-            throw new DexException("Unexpected magic: " + Arrays.toString(magic));
+        if (!DexFormat.isSupportedDexMagic(magic)) {
+            String msg =
+                    String.format("Unexpected magic: [0x%02x, 0x%02x, 0x%02x, 0x%02x, "
+                                    + "0x%02x, 0x%02x, 0x%02x, 0x%02x]",
+                            magic[0], magic[1], magic[2], magic[3],
+                            magic[4], magic[5], magic[6], magic[7]);
+            throw new DexException(msg);
         }
 
         checksum = headerIn.readInt();

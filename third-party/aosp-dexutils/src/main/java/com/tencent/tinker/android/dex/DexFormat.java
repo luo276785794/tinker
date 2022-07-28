@@ -21,13 +21,22 @@ package com.tencent.tinker.android.dex;
  * files, and helper methods for same.
  */
 public final class DexFormat {
+
+
+    /** API level to target in order to generate invoke-polymorphic */
+    public static final int API_INVOKE_POLYMORPHIC = 26;
+
+    /** API level to target in order to pass through default and static interface methods */
+    public static final int API_DEFAULT_INTERFACE_METHODS = 24;
+
+    /** API level to target in order to suppress extended opcode usage */
+    public static final int API_NO_EXTENDED_OPCODES = 13;
+
     /**
      * API level to target in order to produce the most modern file
      * format
      */
-    public static final int API_CURRENT = 14;
-    /** API level to target in order to suppress extended opcode usage */
-    public static final int API_NO_EXTENDED_OPCODES = 13;
+    public static final int API_CURRENT = API_INVOKE_POLYMORPHIC;
     /**
      * file name of the primary {@code .dex} file inside an
      * application or library {@code .jar} file
@@ -37,8 +46,11 @@ public final class DexFormat {
     public static final String MAGIC_PREFIX = "dex\n";
     /** common suffix for all dex file "magic numbers" */
     public static final String MAGIC_SUFFIX = "\0";
-    /** dex file version number for the current format variant */
-    public static final String VERSION_CURRENT = "036";
+    /** dex file version number for API level 26 and earlier */
+    public static final String VERSION_FOR_API_26 = "038";
+    /** dex file version number for API level 24 and earlier */
+    public static final String VERSION_FOR_API_24 = "037";
+
     /** dex file version number for API level 13 and earlier */
     public static final String VERSION_FOR_API_13 = "035";
     /**
@@ -56,7 +68,14 @@ public final class DexFormat {
      * The largest addressable type is 0xffff, in the "instruction formats" spec as type@CCCC.
      */
     public static final int MAX_TYPE_IDX = 0xFFFF;
-
+    /**
+     * Dex file version number for dalvik.
+     * <p>
+     * Note: Dex version 36 was loadable in some versions of Dalvik but was never fully supported or
+     * completed and is not considered a valid dex file format.
+     * </p>
+     */
+    public static final String VERSION_CURRENT = VERSION_FOR_API_24;
     private DexFormat() { }
 
     /**
@@ -76,10 +95,14 @@ public final class DexFormat {
 
         String version = "" + ((char) magic[4]) + ((char) magic[5]) + ((char) magic[6]);
 
-        if (version.equals(VERSION_CURRENT)) {
+        if (version.equals(VERSION_FOR_API_13)) {
+            return API_NO_EXTENDED_OPCODES;
+        } else if (version.equals(VERSION_FOR_API_24)) {
+            return API_DEFAULT_INTERFACE_METHODS;
+        } else if (version.equals(VERSION_FOR_API_26)) {
+            return API_INVOKE_POLYMORPHIC;
+        } else if (version.equals(VERSION_CURRENT)) {
             return API_CURRENT;
-        } else if (version.equals(VERSION_FOR_API_13)) {
-            return 13;
         }
 
         return -1;
@@ -93,10 +116,21 @@ public final class DexFormat {
 
         if (targetApiLevel >= API_CURRENT) {
             version = VERSION_CURRENT;
+        } else if (targetApiLevel >= API_DEFAULT_INTERFACE_METHODS) {
+            version = VERSION_FOR_API_24;
         } else {
             version = VERSION_FOR_API_13;
         }
-
         return MAGIC_PREFIX + version + MAGIC_SUFFIX;
+    }
+
+    /**
+     * Checks whether a DEX file magic string is supported.
+     * @param magic string from DEX file
+     * @return
+     */
+    public static boolean isSupportedDexMagic(byte[] magic) {
+        int api = magicToApi(magic);
+        return api > 0;
     }
 }
